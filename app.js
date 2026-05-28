@@ -486,14 +486,16 @@ function render() {
 
   // Modal overlay — rendered in separate div so it never disturbs #app events
   const modalEl = document.getElementById('modal');
-  if (showPinPrompt) {
-    modalEl.innerHTML = tplPinPrompt();
-    attachPinPromptEvents();
-  } else if (showNamePrompt) {
-    modalEl.innerHTML = tplNamePrompt();
-    attachNamePromptEvents();
-  } else {
-    modalEl.innerHTML = '';
+  if (modalEl) {
+    if (showPinPrompt) {
+      modalEl.innerHTML = tplPinPrompt();
+      attachPinPromptEvents();
+    } else if (showNamePrompt) {
+      modalEl.innerHTML = tplNamePrompt();
+      attachNamePromptEvents();
+    } else {
+      modalEl.innerHTML = '';
+    }
   }
 }
 
