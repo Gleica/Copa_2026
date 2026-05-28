@@ -227,20 +227,24 @@ function tplDropdown() {
   `;
 }
 
-function tplQuickCheck() {
-  const { quickInput } = state;
-  const result = quickCheck(quickInput);
-  let resultHtml = '';
-  if (quickInput.trim() && result) {
+function quickResultHtml(val) {
+  const result = quickCheck(val);
+  if (val.trim() && result) {
     const mod = result.needed ? 'needed' : 'have';
-    resultHtml = `
+    return `
       <div class="quick-result quick-result--${mod}" aria-live="polite" aria-atomic="true">
         <span class="quick-result__code">${esc(result.team.code)} #${result.num}</span>
         <span class="quick-result__verdict">${result.needed ? 'PRECISA!' : 'JÁ TEM'}</span>
       </div>`;
-  } else if (quickInput.trim()) {
-    resultHtml = `<p class="quick-result__hint" aria-live="polite">Código não encontrado &mdash; ex: BRA 8</p>`;
   }
+  if (val.trim()) {
+    return `<p class="quick-result__hint" aria-live="polite">Código não encontrado &mdash; ex: BRA 8</p>`;
+  }
+  return '';
+}
+
+function tplQuickCheck() {
+  const { quickInput } = state;
   return `
     <div class="field">
       <label class="field__label" for="quick-input">Busca rápida</label>
@@ -249,7 +253,7 @@ function tplQuickCheck() {
         value="${esc(quickInput)}"
         autocomplete="off" autocorrect="off" autocapitalize="characters"
         spellcheck="false" inputmode="search" />
-      ${resultHtml}
+      <div id="quick-result"></div>
     </div>
   `;
 }
@@ -482,7 +486,11 @@ function render() {
       </main>`;
   }
   document.getElementById('app').innerHTML = `${tplHeader()}${tplNav()}${body}`;
-  if (source !== 'loading') attachEvents();
+  if (source !== 'loading') {
+    attachEvents();
+    const qr = document.getElementById('quick-result');
+    if (qr && state.quickInput) qr.innerHTML = quickResultHtml(state.quickInput);
+  }
 
   // Modal overlay — rendered in separate div so it never disturbs #app events
   const modalEl = document.getElementById('modal');
@@ -591,9 +599,12 @@ function onNavClick(e) {
 }
 
 function onQuickInput(e) {
-  state = { ...state, quickInput: e.target.value };
-  render();
-  refocus('quick-input');
+  const val = e.target.value;
+  state = { ...state, quickInput: val };
+  const container = document.getElementById('quick-result');
+  if (container) {
+    container.innerHTML = quickResultHtml(val);
+  }
 }
 
 function onTeamInput(e) {
