@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seed — Copa 2026</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #09090b;
+      color: #fafafa;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+    .card {
+      background: #18181b;
+      border: 1.5px solid #3f3f46;
+      border-radius: 14px;
+      padding: 2rem;
+      max-width: 480px;
+      width: 100%;
+    }
+    h1  { font-size: 1.125rem; font-weight: 700; margin-bottom: .5rem; }
+    p   { font-size: .875rem; color: #a1a1aa; line-height: 1.5; margin-bottom: 1rem; }
+    button {
+      display: block;
+      width: 100%;
+      height: 52px;
+      background: #f59e0b;
+      color: #09090b;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 150ms;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    pre {
+      margin-top: 1rem;
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: .875rem;
+      font-size: .8125rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: #a1a1aa;
+      min-height: 3rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Seed — Copa 2026</h1>
+    <p>
+      Popula a tabela <code>stickers</code> no Supabase com as
+      549 figurinhas faltantes de <code>data/figurinhas.js</code>.<br><br>
+      <strong>Execute apenas uma vez</strong> após criar a tabela no painel do Supabase.
+      Rodar de novo é seguro — linhas duplicadas são ignoradas (<code>ignoreDuplicates: true</code>).
+    </p>
+    <button id="run-seed">Rodar Seed</button>
+    <pre id="seed-output">Aguardando…</pre>
+  </div>
+  <script type="module" src="seed.js"></script>
+</body>
+</html>
