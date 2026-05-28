@@ -282,7 +282,15 @@ function selectTeam(team) {
 }
 
 function refocus(id) {
-  document.getElementById(id)?.focus();
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.focus();
+  // After a full re-render the new input element's cursor defaults to position 0
+  // on several mobile browsers, causing reversed typing. Move it to the end.
+  if (el.type !== 'number') {
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
