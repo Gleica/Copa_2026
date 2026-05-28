@@ -1,4 +1,6 @@
 import { figurinhas } from './data/figurinhas.js';
+import { supabase }   from './supabase.js';
+import { PAIR_CODE }  from './config.js';
 
 // ── Logic ─────────────────────────────────────────────────────────────────────
 
@@ -12,7 +14,7 @@ function normalize(str) {
 function searchTeams(query) {
   const q = normalize(query.trim());
   if (!q) return [];
-  return figurinhas.filter(t =>
+  return state.teams.filter(t =>
     normalize(t.code).startsWith(q) ||
     normalize(t.name).includes(q)
   );
@@ -23,18 +25,46 @@ function isNeeded(team, num) {
 }
 
 function totalMissing() {
-  return figurinhas.reduce((acc, t) => acc + t.missing.length, 0);
+  return state.teams.reduce((acc, t) => acc + t.missing.length, 0);
+}
+
+async function loadFromSupabase() {
+  const { data, error } = await supabase
+    .from('stickers')
+    .select('team_code, number')
+    .eq('status', 'faltante')
+    .eq('pair_id', PAIR_CODE);
+
+  if (error) throw error;
+
+  if (data.length === 0) {
+    throw new Error('Nenhuma figurinha encontrada — confirme o PAIR_CODE e rode o seed.');
+  }
+
+  const byTeam = {};
+  for (const row of data) {
+    if (!byTeam[row.team_code]) byTeam[row.team_code] = [];
+    byTeam[row.team_code].push(row.number);
+  }
+
+  // Preserve name and page from static data; replace missing[] with live data.
+  return figurinhas.map(team => ({
+    ...team,
+    missing: (byTeam[team.code] || []).sort((a, b) => a - b),
+  }));
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let state = {
-  query:           '',
-  filteredTeams:   [],
-  selectedTeam:    null,
-  stickerNum:      '',
-  dropdownOpen:    false,
-  highlightedIdx:  0,
+  query:          '',
+  filteredTeams:  [],
+  selectedTeam:   null,
+  stickerNum:     '',
+  dropdownOpen:   false,
+  highlightedIdx: 0,
+  source:         'loading', // 'loading' | 'cloud' | 'local'
+  teams:          [],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,20 +79,38 @@ function esc(str) {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
+function tplSourceBadge() {
+  const { source } = state;
+  if (source === 'loading') return `<span class="badge badge--loading">carregando…</span>`;
+  if (source === 'cloud')   return `<span class="badge badge--cloud">● nuvem</span>`;
+  return                           `<span class="badge badge--local">○ local</span>`;
+}
+
 function tplHeader() {
+  const { source, teams } = state;
+  const stats = source === 'loading'
+    ? 'buscando dados…'
+    : `<strong>${totalMissing()}</strong> figurinhas faltando &nbsp;·&nbsp; <strong>${teams.length}</strong> seleções`;
+
   return `
     <header class="header">
       <div class="header__top">
         <h1 class="header__title">
           Conferidor <span class="header__accent">Copa 2026</span>
         </h1>
+        ${tplSourceBadge()}
       </div>
-      <p class="header__stats">
-        <strong>${totalMissing()}</strong> figurinhas faltando
-        &nbsp;·&nbsp;
-        <strong>${figurinhas.length}</strong> seleções
-      </p>
+      <p class="header__stats">${stats}</p>
     </header>
+  `;
+}
+
+function tplOfflineBanner() {
+  if (state.source !== 'local') return '';
+  return `
+    <div class="offline-banner" role="alert">
+      Sem conexão com o Supabase — usando dados locais (somente leitura)
+    </div>
   `;
 }
 
@@ -188,15 +236,18 @@ function tplTeamCard() {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
-  document.getElementById('app').innerHTML = `
-    ${tplHeader()}
-    <main class="main">
-      ${tplSearch()}
-      ${tplResult()}
-      ${tplTeamCard()}
-    </main>
-  `;
-  attachEvents();
+  const { source } = state;
+  const body = source === 'loading'
+    ? `<div class="loading" aria-live="polite" aria-busy="true">Buscando figurinhas…</div>`
+    : `${tplOfflineBanner()}
+       <main class="main">
+         ${tplSearch()}
+         ${tplResult()}
+         ${tplTeamCard()}
+       </main>`;
+
+  document.getElementById('app').innerHTML = `${tplHeader()}${body}`;
+  if (source !== 'loading') attachEvents();
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -285,8 +336,6 @@ function refocus(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.focus();
-  // After a full re-render the new input element's cursor defaults to position 0
-  // on several mobile browsers, causing reversed typing. Move it to the end.
   if (el.type !== 'number') {
     const len = el.value.length;
     el.setSelectionRange(len, len);
@@ -302,4 +351,16 @@ document.addEventListener('click', (e) => {
   }
 });
 
-render();
+async function init() {
+  render(); // exibe loading enquanto busca
+  try {
+    const teams = await loadFromSupabase();
+    state = { ...state, source: 'cloud', teams };
+  } catch (err) {
+    console.warn('Supabase indisponível, usando dados locais:', err.message);
+    state = { ...state, source: 'local', teams: figurinhas };
+  }
+  render();
+}
+
+init();

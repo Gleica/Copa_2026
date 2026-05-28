@@ -9,6 +9,7 @@
   --text-subtle:  #52525b;
 
   --accent:       #f59e0b;
+  --accent-dim:   #78350f;
 
   --green:        #4ade80;
   --green-dim:    #16a34a;
@@ -64,6 +65,13 @@ body {
 .header {
   padding: 0.75rem 0 0.875rem;
   border-bottom: 1px solid var(--border);
+}
+
+.header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .header__title {
@@ -393,6 +401,54 @@ body {
   font-size: 0.875rem;
   color: var(--text-subtle);
   font-style: italic;
+}
+
+/* ── Source badge ───────────────────────────────────────────────────────────── */
+.badge {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge--loading {
+  color: var(--text-subtle);
+  border-color: var(--border);
+}
+
+.badge--cloud {
+  color: var(--green-dim);
+  border-color: var(--green-ring);
+  background: var(--green-bg);
+}
+
+.badge--local {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: #1c1407;
+}
+
+/* ── Offline banner ─────────────────────────────────────────────────────────── */
+.offline-banner {
+  background: #1c1407;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--r);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--accent);
+  margin-top: 0.875rem;
+}
+
+/* ── Loading state ──────────────────────────────────────────────────────────── */
+.loading {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 3rem 0;
 }
 
 /* ── Desktop bump ───────────────────────────────────────────────────────────── */
