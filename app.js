@@ -3,7 +3,7 @@ import { fetchFaltantes, markCollected, undoCollected, fetchRecents, subscribeTo
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const ORIGINAL_TOTAL = figurinhas.reduce((acc, t) => acc + t.missing.length, 0);
+const ALBUM_TOTAL = 979;
 
 // ── Logic ─────────────────────────────────────────────────────────────────────
 
@@ -354,8 +354,8 @@ function tplRecents() {
 
 function tplProgress() {
   const { teams } = state;
-  const collected  = ORIGINAL_TOTAL - totalMissing();
-  const pct        = ORIGINAL_TOTAL > 0 ? Math.round(collected / ORIGINAL_TOTAL * 100) : 0;
+  const collected  = ALBUM_TOTAL - totalMissing();
+  const pct        = ALBUM_TOTAL > 0 ? Math.round(collected / ALBUM_TOTAL * 100) : 0;
   const completed  = teams.filter(t => t.missing.length === 0);
   const incomplete = [...teams.filter(t => t.missing.length > 0)]
     .sort((a, b) => b.missing.length - a.missing.length);
@@ -380,7 +380,7 @@ function tplProgress() {
            aria-label="Progresso: ${pct}%">
         <div class="prog-bar" style="width: ${pct}%"></div>
       </div>
-      <p class="prog-bar__label">${pct}% coletado de ${ORIGINAL_TOTAL} figurinhas originais</p>
+      <p class="prog-bar__label">${pct}% do album (${ALBUM_TOTAL - totalMissing()} de ${ALBUM_TOTAL})</p>
       <button type="button" class="export-btn" id="export-btn">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"
