@@ -404,13 +404,6 @@ function tplProgress() {
         <div class="prog-bar" style="width: ${pct}%"></div>
       </div>
       <p class="prog-bar__label">${pct}% do álbum (${ALBUM_TOTAL - totalMissing()} de ${ALBUM_TOTAL})</p>
-      <button type="button" class="export-btn" id="export-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"
-                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Exportar lista de faltantes
-      </button>
       ${incomplete.length > 0 ? `
         <ul class="prog-list" aria-label="Seleções com faltantes">
           ${incomplete.map(t => `
@@ -435,7 +428,6 @@ function tplProgress() {
 }
 
 function tplNamePrompt() {
-  if (!state.showNamePrompt) return '';
   return `
     <div class="name-prompt" role="dialog" aria-modal="true" aria-labelledby="name-prompt-title">
       <div class="name-prompt__card">
@@ -470,16 +462,8 @@ function tplPinPrompt() {
 
 function render() {
   const { source, showNamePrompt, showPinPrompt, view } = state;
-  if (showPinPrompt) {
-    document.getElementById('app').innerHTML = tplPinPrompt();
-    attachPinPromptEvents();
-    return;
-  }
-  if (showNamePrompt) {
-    document.getElementById('app').innerHTML = tplNamePrompt();
-    attachNamePromptEvents();
-    return;
-  }
+
+  // Main UI — always rendered so inputs and events stay alive
   let body = '';
   if (source === 'loading') {
     body = `<div class="loading" aria-live="polite" aria-busy="true">Buscando figurinhas...</div>`;
@@ -499,6 +483,18 @@ function render() {
   }
   document.getElementById('app').innerHTML = `${tplHeader()}${tplNav()}${body}`;
   if (source !== 'loading') attachEvents();
+
+  // Modal overlay — rendered in separate div so it never disturbs #app events
+  const modalEl = document.getElementById('modal');
+  if (showPinPrompt) {
+    modalEl.innerHTML = tplPinPrompt();
+    attachPinPromptEvents();
+  } else if (showNamePrompt) {
+    modalEl.innerHTML = tplNamePrompt();
+    attachNamePromptEvents();
+  } else {
+    modalEl.innerHTML = '';
+  }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -512,7 +508,6 @@ function attachEvents() {
   const wrap       = document.getElementById('team-wrap');
   const recentsBtn = document.getElementById('recents-toggle');
   const card       = document.querySelector('.team-card .chips');
-  const exportBtn  = document.getElementById('export-btn');
   const lockBtn    = document.getElementById('lock-btn');
 
   navEl?.addEventListener('click',       onNavClick);
@@ -526,7 +521,6 @@ function attachEvents() {
   recentsBtn?.addEventListener('click',  onRecentsToggle);
   card?.addEventListener('click',        onChipClick);
   document.querySelector('.recents__list')?.addEventListener('click', onUndoClick);
-  exportBtn?.addEventListener('click',   () => exportList());
   lockBtn?.addEventListener('click',     onLockClick);
 }
 
