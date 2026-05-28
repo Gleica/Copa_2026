@@ -522,6 +522,7 @@ function attachEvents() {
 
   navEl?.addEventListener('click',       onNavClick);
   quickInput?.addEventListener('input',  onQuickInput);
+  quickInput?.addEventListener('keyup',  onQuickInput);
   teamInput?.addEventListener('input',   onTeamInput);
   teamInput?.addEventListener('keydown', onTeamKeydown);
   teamInput?.addEventListener('focus',   onTeamFocus);
@@ -600,6 +601,7 @@ function onNavClick(e) {
 
 function onQuickInput(e) {
   const val = e.target.value;
+  if (state.quickInput === val) return;
   state = { ...state, quickInput: val };
   const container = document.getElementById('quick-result');
   if (container) {
