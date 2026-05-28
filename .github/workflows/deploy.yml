@@ -1,0 +1,45 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate config.js from secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PAIR_CODE: ${{ secrets.PAIR_CODE }}
+        run: |
+          printf 'export const SUPABASE_URL = "%s";\nexport const SUPABASE_ANON_KEY = "%s";\nexport const PAIR_CODE = "%s";\n' \
+            "$SUPABASE_URL" "$SUPABASE_ANON_KEY" "$PAIR_CODE" > config.js
+
+      - name: Add .nojekyll
+        run: touch .nojekyll
+
+      - uses: actions/configure-pages@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - uses: actions/deploy-pages@v4
+        id: deployment

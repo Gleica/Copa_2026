@@ -1,6 +1,5 @@
-import { figurinhas } from './data/figurinhas.js';
-import { supabase }   from './supabase.js';
-import { PAIR_CODE }  from './config.js';
+import { figurinhas }      from './data/figurinhas.js';
+import { fetchFaltantes, markCollected, undoCollected, fetchRecents, subscribeToChanges } from './db.js';
 
 // ── Logic ─────────────────────────────────────────────────────────────────────
 
@@ -28,26 +27,23 @@ function totalMissing() {
   return state.teams.reduce((acc, t) => acc + t.missing.length, 0);
 }
 
-async function loadFromSupabase() {
-  const { data, error } = await supabase
-    .from('stickers')
-    .select('team_code, number')
-    .eq('status', 'faltante')
-    .eq('pair_id', PAIR_CODE);
+function updateTeamMissing(teamCode, number, action) {
+  return state.teams.map(t => {
+    if (t.code !== teamCode) return t;
+    const missing = action === 'remove'
+      ? t.missing.filter(n => n !== number)
+      : [...t.missing, number].sort((a, b) => a - b);
+    return { ...t, missing };
+  });
+}
 
-  if (error) throw error;
-
-  if (data.length === 0) {
-    throw new Error('Nenhuma figurinha encontrada — confirme o PAIR_CODE e rode o seed.');
-  }
-
+async function loadTeams() {
+  const data = await fetchFaltantes();
   const byTeam = {};
   for (const row of data) {
     if (!byTeam[row.team_code]) byTeam[row.team_code] = [];
     byTeam[row.team_code].push(row.number);
   }
-
-  // Preserve name and page from static data; replace missing[] with live data.
   return figurinhas.map(team => ({
     ...team,
     missing: (byTeam[team.code] || []).sort((a, b) => a - b),
@@ -65,6 +61,11 @@ let state = {
   highlightedIdx: 0,
   source:         'loading', // 'loading' | 'cloud' | 'local'
   teams:          [],
+  userName:       localStorage.getItem('fifa26_username') || '',
+  showNamePrompt: false,
+  recents:        [],
+  recentsOpen:    false,
+  recentsLoading: false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -75,6 +76,25 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+let toastTimer = null;
+
+function showToast(message) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('toast--visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('toast--visible'), 3500);
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
@@ -208,13 +228,19 @@ function tplResult() {
 }
 
 function tplTeamCard() {
-  const { selectedTeam, stickerNum } = state;
+  const { selectedTeam, stickerNum, source } = state;
   if (!selectedTeam) return '';
 
   const checkedNum = parseInt(stickerNum, 10);
-  const chips = selectedTeam.missing.map(n =>
-    `<span class="chip${n === checkedNum ? ' chip--active' : ''}">${n}</span>`
-  ).join('');
+  const interactive = source === 'cloud';
+
+  const chips = selectedTeam.missing.map(n => {
+    const isActive = n === checkedNum;
+    if (interactive) {
+      return `<button type="button" class="chip${isActive ? ' chip--active' : ''}" data-num="${n}" aria-label="Marcar figurinha ${n} como colada">${n}</button>`;
+    }
+    return `<span class="chip${isActive ? ' chip--active' : ''}">${n}</span>`;
+  }).join('');
 
   return `
     <section class="team-card">
@@ -229,14 +255,94 @@ function tplTeamCard() {
       <div class="chips">
         ${chips || '<span class="chips__empty">Nenhuma faltando!</span>'}
       </div>
+      ${interactive ? '<p class="chips__hint">Toque num número para marcar como colada</p>' : ''}
     </section>
+  `;
+}
+
+function tplRecents() {
+  const { recentsOpen, recents, recentsLoading, source } = state;
+  if (source !== 'cloud') return '';
+
+  const chevron = recentsOpen ? '▲' : '▼';
+
+  if (!recentsOpen) {
+    return `
+      <div class="recents">
+        <button class="recents__toggle" id="recents-toggle" type="button">
+          Coladas recentes ${chevron}
+        </button>
+      </div>
+    `;
+  }
+
+  let body = '';
+  if (recentsLoading) {
+    body = `<p class="recents__empty">Carregando…</p>`;
+  } else if (recents.length === 0) {
+    body = `<p class="recents__empty">Nenhuma figurinha colada ainda.</p>`;
+  } else {
+    body = `<ul class="recents__list">
+      ${recents.map(r => `
+        <li class="recents__item">
+          <span class="recents__info">
+            <span class="recents__code">${esc(r.team_code)}</span>
+            <span class="recents__num">#${r.number}</span>
+            <span class="recents__by">${esc(r.updated_by || '?')}</span>
+            <span class="recents__time">${formatTime(r.updated_at)}</span>
+          </span>
+          <button type="button" class="recents__undo" data-team="${esc(r.team_code)}" data-num="${r.number}" aria-label="Desfazer figurinha ${r.team_code} ${r.number}">
+            desfazer
+          </button>
+        </li>
+      `).join('')}
+    </ul>`;
+  }
+
+  return `
+    <div class="recents">
+      <button class="recents__toggle" id="recents-toggle" type="button">
+        Coladas recentes ${chevron}
+      </button>
+      ${body}
+    </div>
+  `;
+}
+
+function tplNamePrompt() {
+  if (!state.showNamePrompt) return '';
+  return `
+    <div class="name-prompt" role="dialog" aria-modal="true" aria-labelledby="name-prompt-title">
+      <div class="name-prompt__card">
+        <h2 class="name-prompt__title" id="name-prompt-title">Qual é o seu nome?</h2>
+        <p class="name-prompt__sub">Usado para identificar quem colou cada figurinha.</p>
+        <input
+          class="field__input name-prompt__input"
+          type="text"
+          id="name-input"
+          placeholder="Ex: Gleica, Patty…"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          maxlength="30"
+        />
+        <button class="name-prompt__btn" id="name-save-btn" type="button">Salvar</button>
+      </div>
+    </div>
   `;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
-  const { source } = state;
+  const { source, showNamePrompt } = state;
+
+  if (showNamePrompt) {
+    document.getElementById('app').innerHTML = tplNamePrompt();
+    attachNamePromptEvents();
+    return;
+  }
+
   const body = source === 'loading'
     ? `<div class="loading" aria-live="polite" aria-busy="true">Buscando figurinhas…</div>`
     : `${tplOfflineBanner()}
@@ -244,6 +350,7 @@ function render() {
          ${tplSearch()}
          ${tplResult()}
          ${tplTeamCard()}
+         ${tplRecents()}
        </main>`;
 
   document.getElementById('app').innerHTML = `${tplHeader()}${body}`;
@@ -253,10 +360,12 @@ function render() {
 // ── Events ────────────────────────────────────────────────────────────────────
 
 function attachEvents() {
-  const teamInput = document.getElementById('team-input');
-  const numInput  = document.getElementById('num-input');
-  const clearBtn  = document.getElementById('clear-btn');
-  const wrap      = document.getElementById('team-wrap');
+  const teamInput  = document.getElementById('team-input');
+  const numInput   = document.getElementById('num-input');
+  const clearBtn   = document.getElementById('clear-btn');
+  const wrap       = document.getElementById('team-wrap');
+  const recentsBtn = document.getElementById('recents-toggle');
+  const card       = document.querySelector('.team-card .chips');
 
   teamInput?.addEventListener('input',   onTeamInput);
   teamInput?.addEventListener('keydown', onTeamKeydown);
@@ -264,6 +373,28 @@ function attachEvents() {
   numInput?.addEventListener('input',    onNumInput);
   clearBtn?.addEventListener('click',    onClearTeam);
   wrap?.addEventListener('click',        onWrapClick);
+  recentsBtn?.addEventListener('click',  onRecentsToggle);
+  card?.addEventListener('click',        onChipClick);
+  document.querySelector('.recents__list')?.addEventListener('click', onUndoClick);
+}
+
+function attachNamePromptEvents() {
+  const input   = document.getElementById('name-input');
+  const saveBtn = document.getElementById('name-save-btn');
+
+  input?.focus();
+
+  const save = () => {
+    const name = (input?.value || '').trim();
+    if (!name) return;
+    localStorage.setItem('fifa26_username', name);
+    state = { ...state, userName: name, showNamePrompt: false };
+    render();
+    init();
+  };
+
+  saveBtn?.addEventListener('click', save);
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
 }
 
 function onTeamInput(e) {
@@ -325,6 +456,84 @@ function onWrapClick(e) {
   if (team) selectTeam(team);
 }
 
+async function onChipClick(e) {
+  const btn = e.target.closest('.chip');
+  if (!btn || !btn.dataset.num) return;
+
+  const num        = parseInt(btn.dataset.num, 10);
+  const team       = state.selectedTeam;
+  if (!team) return;
+
+  const prevTeams   = state.teams;
+  const prevTeam    = state.selectedTeam;
+
+  const nextTeams   = updateTeamMissing(team.code, num, 'remove');
+  const nextTeam    = nextTeams.find(t => t.code === team.code) || null;
+
+  state = { ...state, teams: nextTeams, selectedTeam: nextTeam };
+  render();
+  refocus('num-input');
+
+  try {
+    await markCollected(team.code, num, state.userName);
+    if (state.recentsOpen) await reloadRecents();
+  } catch (err) {
+    console.warn('markCollected falhou, revertendo:', err.message);
+    state = { ...state, teams: prevTeams, selectedTeam: prevTeam };
+    render();
+    showToast('Erro ao salvar. Tente novamente.');
+  }
+}
+
+async function onUndoClick(e) {
+  const btn = e.target.closest('.recents__undo');
+  if (!btn) return;
+
+  const teamCode = btn.dataset.team;
+  const number   = parseInt(btn.dataset.num, 10);
+
+  const prevTeams   = state.teams;
+  const prevRecents = state.recents;
+
+  const nextTeams   = updateTeamMissing(teamCode, number, 'add');
+  const nextRecents = state.recents.filter(r => !(r.team_code === teamCode && r.number === number));
+
+  const nextTeam = state.selectedTeam?.code === teamCode
+    ? nextTeams.find(t => t.code === teamCode) || null
+    : state.selectedTeam;
+
+  state = { ...state, teams: nextTeams, selectedTeam: nextTeam, recents: nextRecents };
+  render();
+
+  try {
+    await undoCollected(teamCode, number, state.userName);
+  } catch (err) {
+    console.warn('undoCollected falhou, revertendo:', err.message);
+    state = { ...state, teams: prevTeams, recents: prevRecents,
+              selectedTeam: prevTeam };
+    render();
+    showToast('Erro ao desfazer. Tente novamente.');
+  }
+}
+
+async function onRecentsToggle() {
+  const opening = !state.recentsOpen;
+  state = { ...state, recentsOpen: opening, recentsLoading: opening };
+  render();
+
+  if (opening) await reloadRecents();
+}
+
+async function reloadRecents() {
+  try {
+    const recents = await fetchRecents(20);
+    state = { ...state, recents, recentsLoading: false };
+  } catch {
+    state = { ...state, recents: [], recentsLoading: false };
+  }
+  render();
+}
+
 function selectTeam(team) {
   state = { ...state, selectedTeam: team, query: `${team.code} — ${team.name}`,
             dropdownOpen: false, filteredTeams: [], stickerNum: '' };
@@ -342,6 +551,30 @@ function refocus(id) {
   }
 }
 
+// ── Realtime ──────────────────────────────────────────────────────────────────
+
+function handleRemoteUpdate(payload) {
+  const row = payload.new;
+  if (!row) return;
+
+  const isOwnUpdate = row.updated_by === state.userName;
+  const action = row.status === 'colada' ? 'remove' : 'add';
+
+  state = { ...state, teams: updateTeamMissing(row.team_code, row.number, action) };
+
+  const updatedTeam = state.teams.find(t => t.code === state.selectedTeam?.code);
+  if (updatedTeam) state = { ...state, selectedTeam: updatedTeam };
+
+  render();
+
+  if (!isOwnUpdate && row.updated_by) {
+    const verb = row.status === 'colada' ? 'colou' : 'desfez';
+    showToast(`${row.updated_by} ${verb} ${row.team_code} #${row.number}`);
+  }
+
+  if (state.recentsOpen) reloadRecents();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('click', (e) => {
@@ -352,10 +585,11 @@ document.addEventListener('click', (e) => {
 });
 
 async function init() {
-  render(); // exibe loading enquanto busca
+  render();
   try {
-    const teams = await loadFromSupabase();
+    const teams = await loadTeams();
     state = { ...state, source: 'cloud', teams };
+    subscribeToChanges(handleRemoteUpdate);
   } catch (err) {
     console.warn('Supabase indisponível, usando dados locais:', err.message);
     state = { ...state, source: 'local', teams: figurinhas };
@@ -363,4 +597,9 @@ async function init() {
   render();
 }
 
-init();
+if (!state.userName) {
+  state = { ...state, showNamePrompt: true };
+  render();
+} else {
+  init();
+}
