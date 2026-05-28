@@ -358,7 +358,7 @@ function tplProgress() {
   const pct        = ALBUM_TOTAL > 0 ? Math.round(collected / ALBUM_TOTAL * 100) : 0;
   const completed  = teams.filter(t => t.missing.length === 0);
   const incomplete = [...teams.filter(t => t.missing.length > 0)]
-    .sort((a, b) => b.missing.length - a.missing.length);
+    .sort((a, b) => a.missing.length - b.missing.length);
   return `
     <main class="main">
       <div class="prog-summary">
