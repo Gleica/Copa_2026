@@ -23,7 +23,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Generate config.js from secrets
         env:
@@ -37,11 +37,11 @@ jobs:
       - name: Add .nojekyll
         run: touch .nojekyll
 
-      - uses: actions/configure-pages@v4
+      - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
 
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4.0.5
         id: deployment
