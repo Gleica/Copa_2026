@@ -741,7 +741,6 @@ button.chip:active {
   border-radius: var(--r);
   margin-top: 0.5rem;
   border: 1.5px solid transparent;
-  animation: result-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .quick-result--needed {

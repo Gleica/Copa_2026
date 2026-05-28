@@ -228,8 +228,12 @@ function tplDropdown() {
 }
 
 function quickResultHtml(val) {
-  const result = quickCheck(val);
-  if (val.trim() && result) {
+  const trimmed = val.trim();
+  if (!trimmed) return '';
+
+  // Code + number → check specific sticker
+  const result = quickCheck(trimmed);
+  if (result) {
     const mod = result.needed ? 'needed' : 'have';
     return `
       <div class="quick-result quick-result--${mod}" aria-live="polite" aria-atomic="true">
@@ -237,10 +241,22 @@ function quickResultHtml(val) {
         <span class="quick-result__verdict">${result.needed ? 'PRECISA!' : 'JÁ TEM'}</span>
       </div>`;
   }
-  if (val.trim()) {
-    return `<p class="quick-result__hint" aria-live="polite">Código não encontrado &mdash; ex: BRA 8</p>`;
+
+  // Code only (no digits) → show missing stickers for that team
+  if (!/\d/.test(trimmed)) {
+    const code = trimmed.toUpperCase();
+    const team = state.teams.find(t => t.code === code);
+    if (team) {
+      if (team.missing.length === 0) {
+        return `<p class="quick-result__hint" aria-live="polite"><strong>${esc(team.code)}</strong> — Seleção completa! ✓</p>`;
+      }
+      return `<p class="quick-result__hint" aria-live="polite">
+        <strong>${esc(team.code)} — ${esc(team.name)}</strong>: faltam ${team.missing.join(', ')}
+      </p>`;
+    }
   }
-  return '';
+
+  return `<p class="quick-result__hint" aria-live="polite">Não encontrado &mdash; ex: BRA ou BRA 8</p>`;
 }
 
 function tplQuickCheck() {
