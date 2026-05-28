@@ -8,5 +8,6 @@ export const SUPABASE_ANON_KEY = 'SUA_ANON_KEY_AQUI';
 // Escolha algo difícil de adivinhar (ex: "copa2026gleicabrunoXYZ").
 export const PAIR_CODE = 'SEU_PAIR_CODE_AQUI';
 
-// Identifica quem fez a última atualização. Mude para 'esposa' no outro celular.
-export const USER_NAME = 'eu';
+// Hash SHA-256 (hex) do PIN que desbloqueia o modo editor.
+// Gere com: node -e "const c=require('crypto');console.log(c.createHash('sha256').update('SEU_PIN').digest('hex'))"
+export const ACCESS_PIN_HASH = 'SHA256_HEX_DO_SEU_PIN';

@@ -1,4 +1,5 @@
 import { figurinhas }      from './data/figurinhas.js';
+import { ACCESS_PIN_HASH } from './config.js';
 import { fetchFaltantes, markCollected, undoCollected, fetchRecents, subscribeToChanges } from './db.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -52,6 +53,12 @@ function quickCheck(input) {
   return { team, num, needed: isNeeded(team, num) };
 }
 
+async function verifyPin(pin) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex === ACCESS_PIN_HASH;
+}
+
 async function loadTeams() {
   const data = await fetchFaltantes();
   const byTeam = {};
@@ -83,6 +90,9 @@ let state = {
   recents:        [],
   recentsOpen:    false,
   recentsLoading: false,
+  canEdit:        localStorage.getItem('fifa26_edit_unlocked') === 'true',
+  showPinPrompt:  false,
+  initialized:    false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -129,9 +139,9 @@ async function exportList() {
   }
   try {
     await navigator.clipboard.writeText(text);
-    showToast('Lista copiada para a area de transferencia!');
+    showToast('Lista copiada para a área de transferência!');
   } catch {
-    showToast('Nao foi possivel copiar. Tente novamente.');
+    showToast('Não foi possível copiar. Tente novamente.');
   }
 }
 
@@ -145,18 +155,26 @@ function tplSourceBadge() {
 }
 
 function tplHeader() {
-  const { source, teams } = state;
+  const { source, teams, canEdit } = state;
   const stats = source === 'loading'
     ? 'buscando dados...'
-    : `<strong>${totalMissing()}</strong> faltando &nbsp;&middot;&nbsp; <strong>${teams.length}</strong> selecoes`;
-
+    : `<strong>${totalMissing()}</strong> faltando &nbsp;&middot;&nbsp; <strong>${teams.length}</strong> seleções`;
+  const lockSvg = canEdit
+    ? `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M5 7V5a3 3 0 0 1 6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return `
     <header class="header">
       <div class="header__top">
         <h1 class="header__title">
           Conferidor <span class="header__accent">Copa 2026</span>
         </h1>
-        ${tplSourceBadge()}
+        <div class="header__right">
+          ${tplSourceBadge()}
+          <button class="lock-btn${canEdit ? ' lock-btn--unlocked' : ''}" id="lock-btn" type="button"
+            aria-label="${canEdit ? 'Bloquear edição' : 'Desbloquear edição'}">
+            ${lockSvg}
+          </button>
+        </div>
       </div>
       <p class="header__stats">${stats}</p>
     </header>
@@ -167,7 +185,7 @@ function tplNav() {
   const { view, source } = state;
   if (source === 'loading') return '';
   return `
-    <nav class="nav" aria-label="Navegacao principal">
+    <nav class="nav" aria-label="Navegação principal">
       <button class="nav__tab${view === 'check' ? ' nav__tab--active' : ''}"
               type="button" data-view="check" role="tab" aria-selected="${view === 'check'}">
         Conferir
@@ -184,7 +202,7 @@ function tplOfflineBanner() {
   if (state.source !== 'local') return '';
   return `
     <div class="offline-banner" role="alert">
-      Sem conexao com o Supabase &mdash; usando dados locais (somente leitura)
+      Sem conexão com o Supabase &mdash; usando dados locais (somente leitura)
     </div>
   `;
 }
@@ -193,7 +211,7 @@ function tplDropdown() {
   const { filteredTeams, dropdownOpen, highlightedIdx, query } = state;
   if (!dropdownOpen || !query) return '';
   if (filteredTeams.length === 0) {
-    return `<div class="dropdown dropdown--empty">Nenhuma selecao encontrada</div>`;
+    return `<div class="dropdown dropdown--empty">Nenhuma seleção encontrada</div>`;
   }
   return `
     <ul class="dropdown" role="listbox" id="team-listbox">
@@ -218,14 +236,14 @@ function tplQuickCheck() {
     resultHtml = `
       <div class="quick-result quick-result--${mod}" aria-live="polite" aria-atomic="true">
         <span class="quick-result__code">${esc(result.team.code)} #${result.num}</span>
-        <span class="quick-result__verdict">${result.needed ? 'PRECISA!' : 'JA TEM'}</span>
+        <span class="quick-result__verdict">${result.needed ? 'PRECISA!' : 'JÁ TEM'}</span>
       </div>`;
   } else if (quickInput.trim()) {
-    resultHtml = `<p class="quick-result__hint" aria-live="polite">Codigo nao encontrado &mdash; ex: BRA 8</p>`;
+    resultHtml = `<p class="quick-result__hint" aria-live="polite">Código não encontrado &mdash; ex: BRA 8</p>`;
   }
   return `
     <div class="field">
-      <label class="field__label" for="quick-input">Busca rapida</label>
+      <label class="field__label" for="quick-input">Busca rápida</label>
       <input class="field__input" type="text" id="quick-input"
         placeholder="Ex: BRA 8, ARG 12"
         value="${esc(quickInput)}"
@@ -241,7 +259,7 @@ function tplSearch() {
   return `
     <div class="search">
       <div class="field">
-        <label class="field__label" for="team-input">Selecao</label>
+        <label class="field__label" for="team-input">Seleção</label>
         <div class="field__wrap" id="team-wrap">
           <input class="field__input" type="text" id="team-input"
             placeholder="Ex: bra, brasil, tchequia..."
@@ -250,7 +268,7 @@ function tplSearch() {
             role="combobox" aria-autocomplete="list"
             aria-expanded="${dropdownOpen}" aria-controls="team-listbox" />
           ${selectedTeam ? `
-            <button class="field__clear" id="clear-btn" type="button" aria-label="Limpar selecao">
+            <button class="field__clear" id="clear-btn" type="button" aria-label="Limpar seleção">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                 <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
               </svg>
@@ -259,7 +277,7 @@ function tplSearch() {
         </div>
       </div>
       <div class="field">
-        <label class="field__label" for="num-input">No da figurinha</label>
+        <label class="field__label" for="num-input">Nº da figurinha</label>
         <input class="field__input field__input--num" type="number" id="num-input"
           placeholder="Ex: 7" min="1" max="20" inputmode="numeric"
           value="${esc(stickerNum)}"
@@ -279,17 +297,17 @@ function tplResult() {
   return `
     <div class="result result--${mod}" aria-live="assertive" aria-atomic="true">
       <span class="result__label">${esc(selectedTeam.code)} &middot; figurinha ${num}</span>
-      <span class="result__verdict">${needed ? 'PRECISA!' : 'JA TEM'}</span>
-      <span class="result__sub">${needed ? 'Esta na lista de faltantes' : 'Nao precisa desta'}</span>
+      <span class="result__verdict">${needed ? 'PRECISA!' : 'JÁ TEM'}</span>
+      <span class="result__sub">${needed ? 'Está na lista de faltantes' : 'Não precisa desta'}</span>
     </div>
   `;
 }
 
 function tplTeamCard() {
-  const { selectedTeam, stickerNum, source } = state;
+  const { selectedTeam, stickerNum, source, canEdit } = state;
   if (!selectedTeam) return '';
   const checkedNum  = parseInt(stickerNum, 10);
-  const interactive = source === 'cloud';
+  const interactive = canEdit && source === 'cloud';
   const chips = selectedTeam.missing.map(n => {
     const isActive = n === checkedNum;
     if (interactive) {
@@ -297,6 +315,11 @@ function tplTeamCard() {
     }
     return `<span class="chip${isActive ? ' chip--active' : ''}">${n}</span>`;
   }).join('');
+  const hint = interactive
+    ? '<p class="chips__hint">Toque num número para marcar como colada</p>'
+    : source === 'cloud' && !canEdit
+      ? '<p class="chips__hint">Bloqueado — toque no cadeado para editar</p>'
+      : '';
   return `
     <section class="team-card">
       <div class="team-card__head">
@@ -306,18 +329,18 @@ function tplTeamCard() {
         </div>
         <span class="team-card__badge">${selectedTeam.missing.length} faltando</span>
       </div>
-      <p class="team-card__page">Pagina ${esc(String(selectedTeam.page))}</p>
+      <p class="team-card__page">Página ${esc(String(selectedTeam.page))}</p>
       <div class="chips">
         ${chips || '<span class="chips__empty">Nenhuma faltando!</span>'}
       </div>
-      ${interactive ? '<p class="chips__hint">Toque num numero para marcar como colada</p>' : ''}
+      ${hint}
     </section>
   `;
 }
 
 function tplRecents() {
-  const { recentsOpen, recents, recentsLoading, source } = state;
-  if (source !== 'cloud') return '';
+  const { recentsOpen, recents, recentsLoading, source, canEdit } = state;
+  if (source !== 'cloud' || !canEdit) return '';
   const chevron = recentsOpen ? '&uarr;' : '&darr;';
   let body = '';
   if (recentsOpen) {
@@ -380,7 +403,7 @@ function tplProgress() {
            aria-label="Progresso: ${pct}%">
         <div class="prog-bar" style="width: ${pct}%"></div>
       </div>
-      <p class="prog-bar__label">${pct}% do album (${ALBUM_TOTAL - totalMissing()} de ${ALBUM_TOTAL})</p>
+      <p class="prog-bar__label">${pct}% do álbum (${ALBUM_TOTAL - totalMissing()} de ${ALBUM_TOTAL})</p>
       <button type="button" class="export-btn" id="export-btn">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"
@@ -389,7 +412,7 @@ function tplProgress() {
         Exportar lista de faltantes
       </button>
       ${incomplete.length > 0 ? `
-        <ul class="prog-list" aria-label="Selecoes com faltantes">
+        <ul class="prog-list" aria-label="Seleções com faltantes">
           ${incomplete.map(t => `
             <li class="prog-item">
               <span class="prog-item__code">${esc(t.code)}</span>
@@ -398,8 +421,8 @@ function tplProgress() {
             </li>`).join('')}
         </ul>` : ''}
       ${completed.length > 0 ? `
-        <p class="prog-section-label">Selecoes completas</p>
-        <ul class="prog-list prog-list--done" aria-label="Selecoes completas">
+        <p class="prog-section-label">Seleções completas</p>
+        <ul class="prog-list prog-list--done" aria-label="Seleções completas">
           ${completed.map(t => `
             <li class="prog-item prog-item--done">
               <span class="prog-item__code">${esc(t.code)}</span>
@@ -416,12 +439,28 @@ function tplNamePrompt() {
   return `
     <div class="name-prompt" role="dialog" aria-modal="true" aria-labelledby="name-prompt-title">
       <div class="name-prompt__card">
-        <h2 class="name-prompt__title" id="name-prompt-title">Qual e o seu nome?</h2>
-        <p class="name-prompt__sub">Usado para identificar quem colou cada figurinha.</p>
-        <input class="field__input name-prompt__input" type="text" id="name-input"
-          placeholder="Ex: Gleica, Patty..."
-          autocomplete="off" autocorrect="off" spellcheck="false" maxlength="30" />
-        <button class="name-prompt__btn" id="name-save-btn" type="button">Salvar</button>
+        <h2 class="name-prompt__title" id="name-prompt-title">Qual é o seu perfil?</h2>
+        <p class="name-prompt__sub">Escolha para identificar quem colou cada figurinha.</p>
+        <div class="name-choices">
+          <button class="name-choice-btn" type="button" data-name="Gleica">Gleica</button>
+          <button class="name-choice-btn" type="button" data-name="Patty">Patty</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function tplPinPrompt() {
+  return `
+    <div class="name-prompt" role="dialog" aria-modal="true" aria-labelledby="pin-prompt-title">
+      <div class="name-prompt__card">
+        <h2 class="name-prompt__title" id="pin-prompt-title">Modo editor</h2>
+        <p class="name-prompt__sub">Digite o PIN para poder marcar e desmarcar figurinhas.</p>
+        <input class="field__input name-prompt__input" type="password" id="pin-input"
+          placeholder="PIN" autocomplete="current-password" maxlength="50" />
+        <p class="pin-error" id="pin-error" aria-live="polite"></p>
+        <button class="name-prompt__btn" id="pin-save-btn" type="button">Entrar como editor</button>
+        <button class="name-prompt__btn name-prompt__btn--cancel" id="pin-cancel-btn" type="button">Cancelar</button>
       </div>
     </div>
   `;
@@ -430,7 +469,12 @@ function tplNamePrompt() {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
-  const { source, showNamePrompt, view } = state;
+  const { source, showNamePrompt, showPinPrompt, view } = state;
+  if (showPinPrompt) {
+    document.getElementById('app').innerHTML = tplPinPrompt();
+    attachPinPromptEvents();
+    return;
+  }
   if (showNamePrompt) {
     document.getElementById('app').innerHTML = tplNamePrompt();
     attachNamePromptEvents();
@@ -469,6 +513,7 @@ function attachEvents() {
   const recentsBtn = document.getElementById('recents-toggle');
   const card       = document.querySelector('.team-card .chips');
   const exportBtn  = document.getElementById('export-btn');
+  const lockBtn    = document.getElementById('lock-btn');
 
   navEl?.addEventListener('click',       onNavClick);
   quickInput?.addEventListener('input',  onQuickInput);
@@ -482,22 +527,64 @@ function attachEvents() {
   card?.addEventListener('click',        onChipClick);
   document.querySelector('.recents__list')?.addEventListener('click', onUndoClick);
   exportBtn?.addEventListener('click',   () => exportList());
+  lockBtn?.addEventListener('click',     onLockClick);
 }
 
 function attachNamePromptEvents() {
-  const input   = document.getElementById('name-input');
-  const saveBtn = document.getElementById('name-save-btn');
+  document.querySelectorAll('.name-choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.name;
+      if (!name) return;
+      localStorage.setItem('fifa26_username', name);
+      state = { ...state, userName: name, showNamePrompt: false };
+      render();
+      init();
+    });
+  });
+}
+
+function attachPinPromptEvents() {
+  const input     = document.getElementById('pin-input');
+  const saveBtn   = document.getElementById('pin-save-btn');
+  const cancelBtn = document.getElementById('pin-cancel-btn');
+  const errorEl   = document.getElementById('pin-error');
   input?.focus();
-  const save = () => {
-    const name = (input?.value || '').trim();
-    if (!name) return;
-    localStorage.setItem('fifa26_username', name);
-    state = { ...state, userName: name, showNamePrompt: false };
+
+  const confirm = async () => {
+    const pin = (input?.value || '').trim();
+    if (!pin) return;
+    const ok = await verifyPin(pin);
+    if (!ok) {
+      if (errorEl) errorEl.textContent = 'PIN incorreto. Tente novamente.';
+      if (input) { input.value = ''; input.focus(); }
+      return;
+    }
+    localStorage.setItem('fifa26_edit_unlocked', 'true');
+    const needsName = !state.userName;
+    state = { ...state, canEdit: true, showPinPrompt: false, showNamePrompt: needsName };
     render();
-    init();
   };
-  saveBtn?.addEventListener('click', save);
-  input?.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+
+  const cancel = () => {
+    state = { ...state, showPinPrompt: false };
+    render();
+  };
+
+  saveBtn?.addEventListener('click', confirm);
+  cancelBtn?.addEventListener('click', cancel);
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
+}
+
+function onLockClick() {
+  if (state.canEdit) {
+    localStorage.removeItem('fifa26_edit_unlocked');
+    state = { ...state, canEdit: false };
+    render();
+    showToast('Modo visualização ativado.');
+  } else {
+    state = { ...state, showPinPrompt: true };
+    render();
+  }
 }
 
 function onNavClick(e) {
@@ -681,19 +768,20 @@ document.addEventListener('click', (e) => {
 });
 
 async function init() {
+  if (state.initialized) return;
   render();
   try {
     const teams = await loadTeams();
-    state = { ...state, source: 'cloud', teams };
+    state = { ...state, source: 'cloud', teams, initialized: true };
     subscribeToChanges(handleRemoteUpdate);
   } catch (err) {
-    console.warn('Supabase indisponivel, usando dados locais:', err.message);
-    state = { ...state, source: 'local', teams: figurinhas };
+    console.warn('Supabase indisponível, usando dados locais:', err.message);
+    state = { ...state, source: 'local', teams: figurinhas, initialized: true };
   }
   render();
 }
 
-if (!state.userName) {
+if (state.canEdit && !state.userName) {
   state = { ...state, showNamePrompt: true };
   render();
 } else {

@@ -30,9 +30,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           PAIR_CODE: ${{ secrets.PAIR_CODE }}
+          ACCESS_PIN_HASH: ${{ secrets.ACCESS_PIN_HASH }}
         run: |
-          printf 'export const SUPABASE_URL = "%s";\nexport const SUPABASE_ANON_KEY = "%s";\nexport const PAIR_CODE = "%s";\n' \
-            "$SUPABASE_URL" "$SUPABASE_ANON_KEY" "$PAIR_CODE" > config.js
+          printf 'export const SUPABASE_URL = "%s";\nexport const SUPABASE_ANON_KEY = "%s";\nexport const PAIR_CODE = "%s";\nexport const ACCESS_PIN_HASH = "%s";\n' \
+            "$SUPABASE_URL" "$SUPABASE_ANON_KEY" "$PAIR_CODE" "$ACCESS_PIN_HASH" > config.js
 
       - name: Add .nojekyll
         run: touch .nojekyll
