@@ -401,8 +401,7 @@ function tplRecents() {
 
 function tplTroca() {
   const { teams, source, canEdit } = state;
-  const missingTeams = [...teams.filter(t => t.missing.length > 0)]
-    .sort((a, b) => a.missing.length - b.missing.length);
+  const missingTeams = teams.filter(t => t.missing.length > 0);
   const interactive = canEdit && source === 'cloud';
 
   if (missingTeams.length === 0) {
