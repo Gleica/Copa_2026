@@ -1,4 +1,4 @@
-const CACHE = 'copa2026-v3';
+const CACHE = 'copa2026-v4';
 const SHELL = [
   './',
   './style.css',
