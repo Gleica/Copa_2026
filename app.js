@@ -190,6 +190,10 @@ function tplNav() {
               type="button" data-view="check" role="tab" aria-selected="${view === 'check'}">
         Conferir
       </button>
+      <button class="nav__tab${view === 'troca' ? ' nav__tab--active' : ''}"
+              type="button" data-view="troca" role="tab" aria-selected="${view === 'troca'}">
+        Trocar
+      </button>
       <button class="nav__tab${view === 'progress' ? ' nav__tab--active' : ''}"
               type="button" data-view="progress" role="tab" aria-selected="${view === 'progress'}">
         Progresso
@@ -395,6 +399,45 @@ function tplRecents() {
   `;
 }
 
+function tplTroca() {
+  const { teams, source, canEdit } = state;
+  const missingTeams = [...teams.filter(t => t.missing.length > 0)]
+    .sort((a, b) => a.missing.length - b.missing.length);
+  const interactive = canEdit && source === 'cloud';
+
+  if (missingTeams.length === 0) {
+    return `<main class="main"><p class="empty-state">Todas as figurinhas foram coletadas! 🎉</p></main>`;
+  }
+
+  return `
+    <main class="main">
+      <div class="troca-grid">
+        ${missingTeams.map(team => {
+          const chips = team.missing.map(n => {
+            if (interactive) {
+              return `<button type="button" class="chip chip--troca" data-team="${team.code}" data-num="${n}" aria-label="Marcar ${team.code} #${n} como colada">${n}</button>`;
+            }
+            return `<span class="chip chip--troca">${n}</span>`;
+          }).join('');
+          return `
+            <div class="troca-card">
+              <div class="troca-card__head">
+                <span class="troca-card__code">${esc(team.code)}</span>
+                <span class="troca-card__name">${esc(team.name)}</span>
+                <span class="troca-card__count">${team.missing.length}</span>
+              </div>
+              <div class="troca-chips">
+                ${chips}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      ${!interactive && source === 'cloud' ? '<p class="chips__hint" style="margin-top: 1rem;">Bloqueado — toque no cadeado para editar</p>' : ''}
+    </main>
+  `;
+}
+
 function tplProgress() {
   const { teams } = state;
   const collected  = ALBUM_TOTAL - totalMissing();
@@ -487,6 +530,8 @@ function render() {
   let body = '';
   if (source === 'loading') {
     body = `<div class="loading" aria-live="polite" aria-busy="true">Buscando figurinhas...</div>`;
+  } else if (view === 'troca') {
+    body = `${tplOfflineBanner()}${tplTroca()}`;
   } else if (view === 'progress') {
     body = `${tplOfflineBanner()}${tplProgress()}`;
   } else {
@@ -535,6 +580,7 @@ function attachEvents() {
   const recentsBtn = document.getElementById('recents-toggle');
   const card       = document.querySelector('.team-card .chips');
   const lockBtn    = document.getElementById('lock-btn');
+  const trocaGrid  = document.querySelector('.troca-grid');
 
   navEl?.addEventListener('click',       onNavClick);
   quickInput?.addEventListener('input',  onQuickInput);
@@ -547,6 +593,7 @@ function attachEvents() {
   wrap?.addEventListener('click',        onWrapClick);
   recentsBtn?.addEventListener('click',  onRecentsToggle);
   card?.addEventListener('click',        onChipClick);
+  trocaGrid?.addEventListener('click',   onTrocaChipClick);
   document.querySelector('.recents__list')?.addEventListener('click', onUndoClick);
   lockBtn?.addEventListener('click',     onLockClick);
 }
@@ -702,6 +749,27 @@ async function onChipClick(e) {
   } catch (err) {
     console.warn('markCollected falhou, revertendo:', err.message);
     state = { ...state, teams: prevTeams, selectedTeam: prevTeam };
+    render();
+    showToast('Erro ao salvar. Tente novamente.');
+  }
+}
+
+async function onTrocaChipClick(e) {
+  const btn = e.target.closest('.chip--troca');
+  if (!btn || !btn.dataset.team || !btn.dataset.num) return;
+  const teamCode  = btn.dataset.team;
+  const num       = parseInt(btn.dataset.num, 10);
+  const team      = state.teams.find(t => t.code === teamCode);
+  if (!team) return;
+  const prevTeams = state.teams;
+  const nextTeams = updateTeamMissing(teamCode, num, 'remove');
+  state = { ...state, teams: nextTeams };
+  render();
+  try {
+    await markCollected(teamCode, num, state.userName);
+  } catch (err) {
+    console.warn('markCollected falhou, revertendo:', err.message);
+    state = { ...state, teams: prevTeams };
     render();
     showToast('Erro ao salvar. Tente novamente.');
   }
