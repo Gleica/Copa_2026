@@ -46,5 +46,6 @@ export const figurinhas = [
   { code: 'ENG', name: 'Inglaterra',       page: 99,  missing: [1,2,6,7,11,12,14,15,16,19,20] },
   { code: 'CRO', name: 'Croácia',          page: 101, missing: [1] },
   { code: 'GHA', name: 'Gana',             page: 103, missing: [1,2,3,5,7,9,10,14,15,16,18,20] },
+  { code: 'CUW', name: 'Curaçao',          page: 104, missing: [] },
   { code: 'PAN', name: 'Panamá',           page: 105, missing: [1,2,3,4,5,7,8,9,10,11,12,14,16,17,18,19,20] },
 ];
