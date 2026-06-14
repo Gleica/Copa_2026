@@ -1083,8 +1083,4 @@ button.chip:active {
   .result__verdict {
     font-size: 4rem;
   }
-
-  .troca-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
